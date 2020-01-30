@@ -29,10 +29,7 @@ import socket
 from netmiko import ConnectHandler
 from napalm.base import NetworkDriver
 from napalm.base.exceptions import (
-    ConnectionException,
-    SessionLockedException,
-    MergeConfigException,
-    ReplaceConfigException,
+    ConnectionClosedException,
     CommandErrorException,
 )
 
@@ -93,7 +90,6 @@ class S350Driver(NetworkDriver):
                                      **self.netmiko_optional_args)
         self.device.enable()
 
-
     def _discover_file_system(self):
         try:
             return self.device._autodetect_fs()
@@ -102,13 +98,13 @@ class S350Driver(NetworkDriver):
                   "dest_file_system in optional_args)."
             raise CommandErrorException(msg)
 
-
     def close(self):
         """Close the connection to the device."""
         self.device.disconnect()
 
     def _send_command(self, command):
-        """Wrapper for self.device.send.command().
+        """
+        Wrap self.device.send.command().
 
         If command is a list will iterate through commands until valid command.
         """
@@ -124,9 +120,8 @@ class S350Driver(NetworkDriver):
         except (socket.error, EOFError) as e:
             raise ConnectionClosedException(str(e))
 
-
     def _parse_uptime(self, uptime_str):
-        """Parse an uptime string into number of seconds"""
+        """Parse an uptime string into number of seconds."""
         uptime_str = uptime_str.strip()
         days, timespec = uptime_str.split(',')
 
@@ -135,10 +130,11 @@ class S350Driver(NetworkDriver):
         uptime_sec = (int(days) * 86400) + (int(hours) * 3600) + (int(minutes) * 60) + int(seconds)
         return uptime_sec
 
-
     def get_arp_table(self):
         """
-        Get the ARP table, the age isn't readily available so we leave that out for now.
+        Get the ARP table.
+
+        The age isn't readily available so we leave that out for now.
         """
         arp_table = []
 
@@ -164,13 +160,11 @@ class S350Driver(NetworkDriver):
 
         return arp_table
 
-
     def get_config(self, retrieve='all'):
-        """
-        get_config for S350. Since this firmware doesn't support a candidate
-        configuration we leave it empty.
-        """
+        """get_config for S350.
 
+        Since this firmware doesn't support a candidate configuration we leave it empty.
+        """
         configs = {
             'startup': '',
             'running': '',
@@ -258,22 +252,20 @@ class S350Driver(NetworkDriver):
             'vendor': u'Cisco',
         }
 
-
     def get_interfaces(self):
-        """
-        get_interfaces() implementation for S350
-        """
+        """Get interface details for the S350."""
         interfaces = {}
 
         show_status_output = self._send_command('show interfaces status | include (Up|Down)')
         show_description_output = self._send_command('show interfaces description')
         # Since the MAC address for all the local ports are equal, get the address
         # from the first port and use it everywhere.
-        show_system_output = self._send_command('show lldp local GigabitEthernet1 | begin Device\ ID')
+        show_system_output = self._send_command('show lldp local GigabitEthernet1 '
+                                                '| begin Device\\ ID')
 
         try:
             mac = show_system_output.splitlines()[0].split(':', maxsplit=1)[1].strip()
-        except:
+        except ValueError:
             mac = '0'
 
         for status_line in show_status_output.splitlines():
@@ -307,9 +299,8 @@ class S350Driver(NetworkDriver):
 
         return interfaces
 
-
     def get_interfaces_ip(self):
-        """Returns all configured interface IP addresses."""
+        """Return all configured interface IP addresses."""
         interfaces = {}
         show_ip_int = self._send_command('show ip int | include (UP|DOWN)')
 
@@ -334,9 +325,9 @@ class S350Driver(NetworkDriver):
         return interfaces
 
     def get_lldp_neighbors(self):
-        """get_lldp_neighbors implementation for s350"""
+        """get_lldp_neighbors implementation for s350."""
         neighbors = {}
-        output = self._send_command('show lldp neighbors | begin \ \ Port')
+        output = self._send_command('show lldp neighbors | begin Port')
 
         for line in output.splitlines()[2:]:
             line_elems = line.split()
@@ -352,21 +343,16 @@ class S350Driver(NetworkDriver):
         return neighbors
 
     def _get_lldp_line_value(self, line):
-        """
-        Safe-ish method to get the value from an 'lldp neighbors $IF' line.
-        """
+        """Safe-ish method to get the value from an 'lldp neighbors $IF' line."""
         try:
             value = line.split(':')[1:][0].strip()
-        except:
+        except ValueError:
             value = u'N/A'
 
         return value
 
-
     def get_lldp_neighbors_detail(self):
-        """
-        get_lldp_neighbors_detail() implementation for s350
-        """
+        """Get LLDP neighbor detail for s350."""
         details = {}
 
         # First determine all interfaces with valid LLDP neighbors
@@ -394,7 +380,7 @@ class S350Driver(NetworkDriver):
                     try:
                         # Split a line like 'Capabilities: Bridge, Router, Wlan-Access-Point'
                         capabilities = line.split(':')[1:][0].split(',')
-                    except:
+                    except ValueError:
                         capabilities = []
 
                     caps = []
@@ -420,12 +406,10 @@ class S350Driver(NetworkDriver):
 
             details[local_port] = entry
 
-
         return details
 
-
     def get_ntp_servers(self):
-        """get_ntp_servers implementation for S350"""
+        """get_ntp_servers implementation for S350."""
         ntp_servers = {}
         output = self._send_command('show sntp status | include Server')
 
@@ -435,7 +419,7 @@ class S350Driver(NetworkDriver):
         return ntp_servers
 
     def is_alive(self):
-        """Returns an indication of the state of the connection."""
+        """Return an indication of the state of the connection."""
         null = chr(0)
 
         if self.device is None:
@@ -452,9 +436,9 @@ class S350Driver(NetworkDriver):
         # If we made it here, assume the worst.
         return {'is_alive': False}
 
-
     @property
     def dest_file_system(self):
+        """Discover remote file system."""
         # First ensure we have an open connection.
         if self.device and self._dest_file_system is None:
             self._dest_file_system = self._discover_file_system()
