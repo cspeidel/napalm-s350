@@ -37,21 +37,24 @@ class PatchedS350Driver(s350.S350Driver):
         self.patched_attrs = ['device']
         self.device = FakeS350Device()
 
+    def disconnect(self):
+        pass
+
+    def is_alive(self):
+        return {"is_alive": True}  # In testing everything works..
+
+    def open(self):
+        pass
+
 
 class FakeS350Device(BaseTestDouble):
     """S350 device test double."""
 
-    def run_commands(self, command_list, encoding='json'):
-        """Fake run_commands."""
-        result = list()
+    def send_command(self, command, **kwargs):
+        filename = "{}.txt".format(self.sanitize_text(command))
+        full_path = self.find_file(filename)
+        result = self.read_txt_file(full_path)
+        return str(result)
 
-        for command in command_list:
-            filename = '{}.{}'.format(self.sanitize_text(command), encoding)
-            full_path = self.find_file(filename)
-
-            if encoding == 'json':
-                result.append(self.read_json_file(full_path))
-            else:
-                result.append({'output': self.read_txt_file(full_path)})
-
-        return result
+    def disconnect(self):
+        pass
